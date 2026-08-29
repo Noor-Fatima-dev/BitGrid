@@ -5,6 +5,7 @@ import { DotMatrixEngine } from "../src/DotMatrixEngine";
 import DotMatrixScreen from "./components/DotMatrixScreen";
 import GameEngine from "@/src/GameEngine";
 import { ENGINE_CONFIG } from "@/src/engineTypes";
+import SpriteEditor from "./components/SpriteEditor";
 
 type ActiveTab = "EDITOR" | "SPRITES";
 
@@ -42,11 +43,6 @@ export default function Home() {
     try {
       let stepTimer = 0;
 
-      // Register test sprites
-      gameEngine.create("INPUT", "bar", [[true, true, true]], 4, 7, 1, 0);
-      gameEngine.create("BOUNCE", "ball", [[true]], 1, 2, 1, 1);
-
-      // Start engine loop
       engine.start((delta) => {
         try {
           stepTimer += delta;
@@ -91,7 +87,6 @@ export default function Home() {
             </h1>
           </div>
 
-          {/* MODE TAB SWITCHER */}
           <nav className="flex rounded-lg bg-gray-950 p-1 border border-gray-800">
             <button
               onClick={() => setActiveTab("EDITOR")}
@@ -116,7 +111,6 @@ export default function Home() {
           </nav>
         </div>
 
-        {/* RUN / STOP CONTROLS */}
         <div className="flex items-center gap-4">
           <button
             onClick={handleRunGame}
@@ -136,10 +130,11 @@ export default function Home() {
       {/* WORKSPACE */}
       <main className="flex flex-1 overflow-hidden">
         <section className="flex flex-1 flex-col items-center justify-center bg-black p-6">
-          <div className="mb-4 text-xs tracking-widest text-gray-500 uppercase">
-            Virtual LED Hardware Screen
-          </div>
-          <DotMatrixScreen grid={grid} />
+          {activeTab === "SPRITES" && gameEngineRef.current ? (
+            <SpriteEditor gameEngine={gameEngineRef.current} />
+          ) : (
+            <DotMatrixScreen grid={grid} />
+          )}
           {errorMessage && (
             <div className="mt-4 rounded-md border border-rose-800 bg-rose-950/80 p-3 text-xs text-rose-300">
               {errorMessage}

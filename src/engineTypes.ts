@@ -23,6 +23,6 @@ declare class DotMatrixEngine {
 `;
 
 export const ENGINE_CONFIG = {
-  ROWS: 10,
-  COLS: 10,
+  ROWS: 20,
+  COLS: 20,
 } as const;

@@ -1,40 +1,38 @@
 "use client";
 
 import { useState } from "react";
+import { Sprite } from "@/src/Sprite";
+import { ENGINE_CONFIG } from "@/src/engineTypes";
+import GameEngine from "@/src/GameEngine";
 
-export interface Sprite {
-  id: string;
-  rows: number;
-  cols: number;
-  data: boolean[][];
+interface SpriteInfo {
+  x: number;
+  y: number;
+  layout: boolean[][];
 }
 
 interface SpriteEditorProps {
-  rows?: number;
-  cols?: number;
-  onSaveSprite?: (sprite: Sprite) => void;
-  onExportCode?: (code: string) => void;
+  gameEngine: GameEngine;
 }
 
-export default function SpriteEditor({
-  rows = 10,
-  cols = 10,
-  onSaveSprite,
-  onExportCode,
-}: SpriteEditorProps) {
-  // Current editing canvas grid state
+export default function SpriteEditor({ gameEngine }: SpriteEditorProps) {
   const [grid, setGrid] = useState<boolean[][]>(() =>
-    Array.from({ length: rows }, () => Array(cols).fill(false))
+    Array.from({ length: ENGINE_CONFIG.ROWS }, () =>
+      Array(ENGINE_CONFIG.COLS).fill(false)
+    )
   );
   const [spriteId, setSpriteId] = useState<string>("HERO");
   const [isMouseDown, setIsMouseDown] = useState<boolean>(false);
-  const [drawMode, setDrawMode] = useState<boolean>(true); // true = ON, false = OFF
-  const [savedSprites, setSavedSprites] = useState<Sprite[]>([]);
+  const [drawMode, setDrawMode] = useState<boolean>(true);
 
-  // Helper: Crops away empty surrounding padding to extract a tight bounded grid
-  const cropToBoundingBox = (fullGrid: boolean[][]): boolean[][] => {
-    let minR = fullGrid.length, maxR = -1;
-    let minC = fullGrid[0].length, maxC = -1;
+  // Sync saved sprites with GameEngine instance
+  const savedSprites = Array.from(gameEngine.sprites.values());
+
+  const cropToBoundingBox = (fullGrid: boolean[][]): SpriteInfo | null => {
+    let minR = fullGrid.length,
+      maxR = -1;
+    let minC = fullGrid[0].length,
+      maxC = -1;
 
     for (let r = 0; r < fullGrid.length; r++) {
       for (let c = 0; c < fullGrid[r].length; c++) {
@@ -47,17 +45,16 @@ export default function SpriteEditor({
       }
     }
 
-    // Return 1x1 empty pixel array if canvas is completely empty
-    if (maxR === -1) return [[false]];
+    if (maxR === -1) return null;
 
     const cropped: boolean[][] = [];
     for (let r = minR; r <= maxR; r++) {
       cropped.push(fullGrid[r].slice(minC, maxC + 1));
     }
-    return cropped;
+
+    return { x: minC, y: minR, layout: cropped };
   };
 
-  // Toggle single pixel
   const handlePixelPointerDown = (r: number, c: number) => {
     setIsMouseDown(true);
     const newState = !grid[r][c];
@@ -79,81 +76,45 @@ export default function SpriteEditor({
     });
   };
 
-  // Canvas Actions
   const handleClear = () => {
-    setGrid(Array.from({ length: rows }, () => Array(cols).fill(false)));
+    setGrid(
+      Array.from({ length: ENGINE_CONFIG.ROWS }, () =>
+        Array(ENGINE_CONFIG.COLS).fill(false)
+      )
+    );
   };
 
-  const handleFill = () => {
-    setGrid(Array.from({ length: rows }, () => Array(cols).fill(true)));
-  };
-
-  const handleInvert = () => {
-    setGrid((prev) => prev.map((row) => row.map((cell) => !cell)));
-  };
-
-  // Save Sprite to List (Crops to bounding box automatically)
   const handleSave = () => {
-    if (!spriteId.trim()) return;
+    const obj = cropToBoundingBox(grid);
+    if (!spriteId.trim() || !obj) return;
 
-    const croppedData = cropToBoundingBox(grid);
-
-    const newSprite: Sprite = {
-      id: spriteId.trim().toUpperCase(),
-      rows: croppedData.length,
-      cols: croppedData[0]?.length || 0,
-      data: croppedData,
-    };
-
-    setSavedSprites((prev) => {
-      const filtered = prev.filter((s) => s.id !== newSprite.id);
-      return [...filtered, newSprite];
-    });
-
-    if (onSaveSprite) onSaveSprite(newSprite);
+    gameEngine.create("INPUT", spriteId, obj.layout, obj.x, obj.y, 1, 1);
+    handleClear();
   };
 
-  // Load selected saved sprite back onto canvas center
   const handleLoadSprite = (sprite: Sprite) => {
     setSpriteId(sprite.id);
-    
-    // Center the sprite on the full editor canvas
-    const newCanvas = Array.from({ length: rows }, () => Array(cols).fill(false));
-    const startR = Math.max(0, Math.floor((rows - sprite.rows) / 2));
-    const startC = Math.max(0, Math.floor((cols - sprite.cols) / 2));
 
-    for (let r = 0; r < sprite.rows; r++) {
-      for (let c = 0; c < sprite.cols; c++) {
-        if (startR + r < rows && startC + c < cols) {
-          newCanvas[startR + r][startC + c] = sprite.data[r][c];
+    // Reconstruct full grid canvas from cropped sprite layout
+    const newGrid = Array.from({ length: ENGINE_CONFIG.ROWS }, () =>
+      Array(ENGINE_CONFIG.COLS).fill(false)
+    );
+
+    for (let r = 0; r < sprite.height; r++) {
+      for (let c = 0; c < sprite.width; c++) {
+        const targetR = sprite.y + r;
+        const targetC = sprite.x + c;
+        if (
+          targetR < ENGINE_CONFIG.ROWS &&
+          targetC < ENGINE_CONFIG.COLS &&
+          sprite.layout[r][c]
+        ) {
+          newGrid[targetR][targetC] = true;
         }
       }
     }
 
-    setGrid(newCanvas);
-  };
-
-  // Export saved sprites as JS / TS object code
-  const handleExportAll = () => {
-    if (savedSprites.length === 0) return;
-
-    let exportString = `// Generated Sprite Assets\nexport const SPRITES = {\n`;
-    savedSprites.forEach((s) => {
-      exportString += `  "${s.id}": [\n`;
-      s.data.forEach((row) => {
-        const rowStr = row.map((val) => (val ? "1" : "0")).join("");
-        exportString += `    "${rowStr}",\n`;
-      });
-      exportString += `  ],\n`;
-    });
-    exportString += `};\n`;
-
-    if (onExportCode) {
-      onExportCode(exportString);
-    } else {
-      navigator.clipboard.writeText(exportString);
-      alert("Sprite code copied to clipboard!");
-    }
+    setGrid(newGrid);
   };
 
   return (
@@ -190,7 +151,7 @@ export default function SpriteEditor({
           <div
             className="grid gap-1 bg-gray-950 p-2 rounded border border-gray-800"
             style={{
-              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${ENGINE_CONFIG.COLS}, minmax(0, 1fr))`,
             }}
           >
             {grid.map((row, r) =>
@@ -199,7 +160,7 @@ export default function SpriteEditor({
                   key={`${r}-${c}`}
                   onPointerDown={() => handlePixelPointerDown(r, c)}
                   onPointerEnter={() => handlePixelPointerEnter(r, c)}
-                  className={`h-7 w-7 cursor-pointer rounded-sm border transition-colors ${
+                  className={`h-4 w-4 cursor-pointer rounded-sm border transition-colors ${
                     cell
                       ? "bg-emerald-400 border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
                       : "bg-gray-900 border-gray-800 hover:bg-gray-800"
@@ -209,7 +170,6 @@ export default function SpriteEditor({
             )}
           </div>
 
-          {/* QUICK TOOLS */}
           <div className="mt-4 flex gap-2">
             <button
               onClick={handleClear}
@@ -217,22 +177,10 @@ export default function SpriteEditor({
             >
               Clear
             </button>
-            <button
-              onClick={handleFill}
-              className="rounded bg-gray-800 px-3 py-1 text-xs hover:bg-gray-700"
-            >
-              Fill All
-            </button>
-            <button
-              onClick={handleInvert}
-              className="rounded bg-gray-800 px-3 py-1 text-xs hover:bg-gray-700"
-            >
-              Invert
-            </button>
           </div>
         </div>
 
-        {/* SAVED ASSETS & EXPORT PANEL */}
+        {/* SAVED ASSETS PANEL */}
         <div className="flex w-56 flex-col justify-between rounded-lg border border-gray-800 bg-gray-950 p-3">
           <div>
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">
@@ -250,39 +198,14 @@ export default function SpriteEditor({
                       : "border-gray-800 bg-gray-900 text-gray-300 hover:border-gray-700"
                   }`}
                 >
-                  <div className="flex flex-col">
-                    <span className="font-bold">{sprite.id}</span>
-                    <span className="text-[10px] text-gray-500">
-                      {sprite.cols}x{sprite.rows} px
-                    </span>
-                  </div>
-                  <div
-                    className="grid gap-[1px] bg-black p-[2px] rounded border border-gray-800 max-w-[32px] max-h-[32px]"
-                    style={{
-                      gridTemplateColumns: `repeat(${sprite.cols}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {sprite.data.flat().map((pixel, idx) => (
-                      <div
-                        key={idx}
-                        className={`w-1.5 h-1.5 ${
-                          pixel ? "bg-emerald-400" : "bg-gray-900"
-                        }`}
-                      />
-                    ))}
-                  </div>
+                  <span className="font-bold">{sprite.id}</span>
+                  <span className="text-[10px] text-gray-500">
+                    {sprite.width}x{sprite.height}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
-
-          <button
-            onClick={handleExportAll}
-            disabled={savedSprites.length === 0}
-            className="mt-3 w-full rounded bg-indigo-600 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:opacity-40"
-          >
-            📋 EXPORT CODE
-          </button>
         </div>
       </div>
     </div>

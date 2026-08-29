@@ -6,7 +6,7 @@ export type SpriteBehaviorType = "INPUT" | "BOUNCE";
 
 export default class GameEngine {
   public matrix: DotMatrixEngine;
-  private sprites: Map<string, Sprite> = new Map();
+  public sprites: Map<string, Sprite> = new Map();
   public input: InputManager;
 
   constructor(matrix: DotMatrixEngine) {
