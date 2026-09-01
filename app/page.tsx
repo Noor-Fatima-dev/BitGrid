@@ -9,11 +9,22 @@ import SpriteEditor from "./components/SpriteEditor";
 
 type ActiveTab = "EDITOR" | "SPRITES";
 
+interface PlayerStatus {
+  id: string;
+  score: number;
+  health: number;
+  isAlive: boolean;
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("EDITOR");
   const [grid, setGrid] = useState<boolean[][]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [players, setPlayers] = useState<PlayerStatus[]>([]);
+  const [gameEvent, setGameEvent] = useState<{ text: string; tone: "win" | "lose" } | null>(
+    null
+  );
 
   const engineRef = useRef<DotMatrixEngine | null>(null);
   const gameEngineRef = useRef<GameEngine | null>(null);
@@ -27,10 +38,30 @@ export default function Home() {
 
     engine.onRender((newGrid) => setGrid(newGrid));
 
+    gameEngine.onPlayerDied = (player) => {
+      setGameEvent({ text: `💀 ${player.id} died`, tone: "lose" });
+    };
+    gameEngine.onPillBatchDepleted = () => {
+      setGameEvent({ text: "🏆 All pills collected!", tone: "win" });
+    };
+
     return () => {
       engine.destroy();
     };
   }, []);
+
+  const syncPlayerHud = () => {
+    const gameEngine = gameEngineRef.current;
+    if (!gameEngine) return;
+    setPlayers(
+      gameEngine.getAllPlayers().map((p) => ({
+        id: p.id,
+        score: p.score,
+        health: p.health,
+        isAlive: p.isAlive,
+      }))
+    );
+  };
 
   const handleRunGame = () => {
     const engine = engineRef.current;
@@ -39,6 +70,9 @@ export default function Home() {
 
     engine.stop();
     setErrorMessage(null);
+    setGameEvent(null);
+    gameEngine.resetPlayers();
+    syncPlayerHud();
 
     try {
       let stepTimer = 0;
@@ -49,6 +83,7 @@ export default function Home() {
           if (stepTimer > 100) {
             stepTimer = 0;
             gameEngine.render();
+            syncPlayerHud();
           }
         } catch (runtimeError: any) {
           engine.stop();
@@ -74,20 +109,25 @@ export default function Home() {
   return (
     <div className="flex h-screen w-screen flex-col bg-gray-950 text-white font-mono">
       {/* HEADER BAR */}
-      <header className="flex h-16 items-center justify-between border-b border-gray-800 bg-gray-900 px-6">
+      <header className="flex h-16 items-center justify-between border-b border-gray-800 bg-gray-900/80 px-6 shadow-lg backdrop-blur">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <span
-              className={`h-3 w-3 rounded-full ${
-                isRunning ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+              className={`h-2.5 w-2.5 rounded-full ${
+                isRunning ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" : "bg-red-500"
               }`}
             />
-            <h1 className="text-sm font-bold tracking-wider text-gray-200 uppercase">
-              Matrix Arcade IDE
-            </h1>
+            <div>
+              <h1 className="text-sm font-bold tracking-[0.12em] text-gray-100 uppercase leading-none">
+                Matrix Arcade IDE
+              </h1>
+              <span className="text-[10px] tracking-wide text-gray-500">
+                {ENGINE_CONFIG.ROWS}×{ENGINE_CONFIG.COLS} board
+              </span>
+            </div>
           </div>
 
-          <nav className="flex rounded-lg bg-gray-950 p-1 border border-gray-800">
+          <nav className="flex rounded-lg bg-gray-950 p-1 border border-gray-800 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
             <button
               onClick={() => setActiveTab("EDITOR")}
               className={`rounded-md px-4 py-1.5 text-xs font-bold transition ${
@@ -96,7 +136,7 @@ export default function Home() {
                   : "text-gray-400 hover:text-white"
               }`}
             >
-              💻 Code Editor
+              🕹️ Play Mode
             </button>
             <button
               onClick={() => setActiveTab("SPRITES")}
@@ -111,20 +151,22 @@ export default function Home() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleRunGame}
-            className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-emerald-500 active:scale-95"
-          >
-            ▶ RUN GAME
-          </button>
-          <button
-            onClick={handleStopGame}
-            className="rounded-md bg-rose-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-rose-500 active:scale-95"
-          >
-            ⏹ STOP
-          </button>
-        </div>
+        {activeTab === "EDITOR" && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRunGame}
+              className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-950/50 transition hover:bg-emerald-500 active:scale-95"
+            >
+              ▶ RUN GAME
+            </button>
+            <button
+              onClick={handleStopGame}
+              className="rounded-md bg-rose-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-rose-950/50 transition hover:bg-rose-500 active:scale-95"
+            >
+              ⏹ STOP
+            </button>
+          </div>
+        )}
       </header>
 
       {/* WORKSPACE */}
@@ -133,12 +175,64 @@ export default function Home() {
           {activeTab === "SPRITES" && gameEngineRef.current ? (
             <SpriteEditor gameEngine={gameEngineRef.current} />
           ) : (
-            <DotMatrixScreen grid={grid} />
-          )}
-          {errorMessage && (
-            <div className="mt-4 rounded-md border border-rose-800 bg-rose-950/80 p-3 text-xs text-rose-300">
-              {errorMessage}
-            </div>
+            <>
+              {players.length > 0 && (
+                <div className="mb-4 flex flex-wrap justify-center gap-3">
+                  {players.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-xs shadow-lg ${
+                        p.isAlive
+                          ? "border-gray-800 bg-gray-900"
+                          : "border-gray-800 bg-gray-900 opacity-50"
+                      }`}
+                    >
+                      <span className="font-bold text-cyan-300">
+                        {p.isAlive ? "🧍" : "💀"} {p.id}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-500">HP</span>
+                        <div className="h-2 w-20 overflow-hidden rounded bg-gray-800">
+                          <div
+                            className={`h-full transition-all ${
+                              p.health > 50
+                                ? "bg-emerald-500"
+                                : p.health > 20
+                                ? "bg-amber-500"
+                                : "bg-rose-500"
+                            }`}
+                            style={{ width: `${p.health}%` }}
+                          />
+                        </div>
+                      </div>
+                      <span className="text-gray-500">
+                        Score <span className="text-emerald-400 font-bold">{p.score}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <DotMatrixScreen grid={grid} />
+
+              {gameEvent && (
+                <div
+                  className={`mt-4 rounded-md border p-3 text-xs shadow-lg ${
+                    gameEvent.tone === "win"
+                      ? "border-amber-800 bg-amber-950/80 text-amber-300"
+                      : "border-rose-800 bg-rose-950/80 text-rose-300"
+                  }`}
+                >
+                  {gameEvent.text}
+                </div>
+              )}
+
+              {errorMessage && (
+                <div className="mt-4 rounded-md border border-rose-800 bg-rose-950/80 p-3 text-xs text-rose-300 shadow-lg">
+                  {errorMessage}
+                </div>
+              )}
+            </>
           )}
         </section>
       </main>
