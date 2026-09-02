@@ -1,241 +1,84 @@
+// app/page.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { DotMatrixEngine } from "../src/DotMatrixEngine";
-import DotMatrixScreen from "./components/DotMatrixScreen";
-import GameEngine from "@/src/GameEngine";
-import { ENGINE_CONFIG } from "@/src/engineTypes";
-import SpriteEditor from "./components/SpriteEditor";
+import Link from "next/link";
+import { Crosshair, Heart, Paintbrush, Play, Zap } from "lucide-react";
+import { pixelFont } from "./fonts";
 
-type ActiveTab = "EDITOR" | "SPRITES";
-
-interface PlayerStatus {
-  id: string;
-  score: number;
-  health: number;
-  isAlive: boolean;
-}
+const FEATURES = [
+  { icon: Paintbrush, label: "Sprite Editor" },
+  { icon: Zap, label: "Collision Engine" },
+  { icon: Heart, label: "Score & Health" },
+  { icon: Crosshair, label: "Weapons" },
+];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("EDITOR");
-  const [grid, setGrid] = useState<boolean[][]>([]);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [players, setPlayers] = useState<PlayerStatus[]>([]);
-  const [gameEvent, setGameEvent] = useState<{ text: string; tone: "win" | "lose" } | null>(
-    null
-  );
-
-  const engineRef = useRef<DotMatrixEngine | null>(null);
-  const gameEngineRef = useRef<GameEngine | null>(null);
-
-  useEffect(() => {
-    const engine = new DotMatrixEngine(ENGINE_CONFIG.ROWS, ENGINE_CONFIG.COLS);
-    const gameEngine = new GameEngine(engine);
-
-    engineRef.current = engine;
-    gameEngineRef.current = gameEngine;
-
-    engine.onRender((newGrid) => setGrid(newGrid));
-
-    gameEngine.onPlayerDied = (player) => {
-      setGameEvent({ text: `💀 ${player.id} died`, tone: "lose" });
-    };
-    gameEngine.onPillBatchDepleted = () => {
-      setGameEvent({ text: "🏆 All pills collected!", tone: "win" });
-    };
-
-    return () => {
-      engine.destroy();
-    };
-  }, []);
-
-  const syncPlayerHud = () => {
-    const gameEngine = gameEngineRef.current;
-    if (!gameEngine) return;
-    setPlayers(
-      gameEngine.getAllPlayers().map((p) => ({
-        id: p.id,
-        score: p.score,
-        health: p.health,
-        isAlive: p.isAlive,
-      }))
-    );
-  };
-
-  const handleRunGame = () => {
-    const engine = engineRef.current;
-    const gameEngine = gameEngineRef.current;
-    if (!engine || !gameEngine) return;
-
-    engine.stop();
-    setErrorMessage(null);
-    setGameEvent(null);
-    gameEngine.resetPlayers();
-    syncPlayerHud();
-
-    try {
-      let stepTimer = 0;
-
-      engine.start((delta) => {
-        try {
-          stepTimer += delta;
-          if (stepTimer > 100) {
-            stepTimer = 0;
-            gameEngine.render();
-            syncPlayerHud();
-          }
-        } catch (runtimeError: any) {
-          engine.stop();
-          setIsRunning(false);
-          setErrorMessage(`Runtime Error: ${runtimeError.message}`);
-        }
-      });
-
-      setIsRunning(true);
-    } catch (compileError: any) {
-      setErrorMessage(`Syntax Error: ${compileError.message}`);
-    }
-  };
-
-  const handleStopGame = () => {
-    if (engineRef.current) {
-      engineRef.current.stop();
-      engineRef.current.clear();
-    }
-    setIsRunning(false);
-  };
-
   return (
-    <div className="flex h-screen w-screen flex-col bg-gray-950 text-white font-mono">
-      {/* HEADER BAR */}
-      <header className="flex h-16 items-center justify-between border-b border-gray-800 bg-gray-900/80 px-6 shadow-lg backdrop-blur">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                isRunning ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" : "bg-red-500"
-              }`}
-            />
-            <div>
-              <h1 className="text-sm font-bold tracking-[0.12em] text-gray-100 uppercase leading-none">
-                Matrix Arcade IDE
-              </h1>
-              <span className="text-[10px] tracking-wide text-gray-500">
-                {ENGINE_CONFIG.ROWS}×{ENGINE_CONFIG.COLS} board
-              </span>
-            </div>
-          </div>
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(239,68,68,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(239,68,68,0.5) 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+      <div className="pointer-events-none absolute inset-0 animate-[scanline_6s_linear_infinite] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(255,0,0,0.03)_50%)] bg-[length:100%_4px]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.85)_75%)]" />
 
-          <nav className="flex rounded-lg bg-gray-950 p-1 border border-gray-800 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
-            <button
-              onClick={() => setActiveTab("EDITOR")}
-              className={`rounded-md px-4 py-1.5 text-xs font-bold transition ${
-                activeTab === "EDITOR"
-                  ? "bg-gray-800 text-emerald-400 shadow"
-                  : "text-gray-400 hover:text-white"
-              }`}
+      <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center">
+        <span className="rounded-full border border-red-800 bg-red-950/40 px-4 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-red-400">
+          Work in progress
+        </span>
+
+        <h1
+          className={`${pixelFont.className} text-3xl leading-relaxed text-red-500 drop-shadow-[0_0_18px_rgba(239,68,68,0.75)] sm:text-5xl`}
+        >
+          MATRIX
+          <br />
+          ARCADE
+        </h1>
+
+        <p className="max-w-md text-sm leading-relaxed text-gray-400">
+          A pixel-grid game engine. Draw sprites, wire up behavior, test it
+          live, then share a link — all on one dot-matrix screen.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {FEATURES.map((f) => (
+            <span
+              key={f.label}
+              className="flex items-center gap-1.5 rounded-full border border-gray-800 bg-gray-950/80 px-3 py-1.5 text-[11px] text-gray-300"
             >
-              🕹️ Play Mode
-            </button>
-            <button
-              onClick={() => setActiveTab("SPRITES")}
-              className={`rounded-md px-4 py-1.5 text-xs font-bold transition ${
-                activeTab === "SPRITES"
-                  ? "bg-gray-800 text-emerald-400 shadow"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              🎨 Sprite Drawer
-            </button>
-          </nav>
+              <f.icon size={13} />
+              {f.label}
+            </span>
+          ))}
         </div>
 
-        {activeTab === "EDITOR" && (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleRunGame}
-              className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-950/50 transition hover:bg-emerald-500 active:scale-95"
-            >
-              ▶ RUN GAME
-            </button>
-            <button
-              onClick={handleStopGame}
-              className="rounded-md bg-rose-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-rose-950/50 transition hover:bg-rose-500 active:scale-95"
-            >
-              ⏹ STOP
-            </button>
-          </div>
-        )}
-      </header>
+        <Link
+          href="/studio"
+          className="group relative mt-4 flex items-center gap-2 rounded-lg border-2 border-red-600 bg-red-950/30 px-8 py-3 text-xs font-bold uppercase tracking-[0.2em] text-red-400 shadow-[0_0_25px_rgba(239,68,68,0.35)] transition hover:bg-red-600 hover:text-white hover:shadow-[0_0_35px_rgba(239,68,68,0.6)] active:scale-95"
+        >
+          <Play size={14} />
+          Enter Studio
+        </Link>
 
-      {/* WORKSPACE */}
-      <main className="flex flex-1 overflow-hidden">
-        <section className="flex flex-1 flex-col items-center justify-center bg-black p-6">
-          {activeTab === "SPRITES" && gameEngineRef.current ? (
-            <SpriteEditor gameEngine={gameEngineRef.current} />
-          ) : (
-            <>
-              {players.length > 0 && (
-                <div className="mb-4 flex flex-wrap justify-center gap-3">
-                  {players.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-xs shadow-lg ${
-                        p.isAlive
-                          ? "border-gray-800 bg-gray-900"
-                          : "border-gray-800 bg-gray-900 opacity-50"
-                      }`}
-                    >
-                      <span className="font-bold text-cyan-300">
-                        {p.isAlive ? "🧍" : "💀"} {p.id}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500">HP</span>
-                        <div className="h-2 w-20 overflow-hidden rounded bg-gray-800">
-                          <div
-                            className={`h-full transition-all ${
-                              p.health > 50
-                                ? "bg-emerald-500"
-                                : p.health > 20
-                                ? "bg-amber-500"
-                                : "bg-rose-500"
-                            }`}
-                            style={{ width: `${p.health}%` }}
-                          />
-                        </div>
-                      </div>
-                      <span className="text-gray-500">
-                        Score <span className="text-emerald-400 font-bold">{p.score}</span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+        <p className="mt-6 text-[10px] uppercase tracking-[0.25em] text-gray-700">
+          Built with Next.js · No account needed yet
+        </p>
+      </div>
 
-              <DotMatrixScreen grid={grid} />
-
-              {gameEvent && (
-                <div
-                  className={`mt-4 rounded-md border p-3 text-xs shadow-lg ${
-                    gameEvent.tone === "win"
-                      ? "border-amber-800 bg-amber-950/80 text-amber-300"
-                      : "border-rose-800 bg-rose-950/80 text-rose-300"
-                  }`}
-                >
-                  {gameEvent.text}
-                </div>
-              )}
-
-              {errorMessage && (
-                <div className="mt-4 rounded-md border border-rose-800 bg-rose-950/80 p-3 text-xs text-rose-300 shadow-lg">
-                  {errorMessage}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-      </main>
-    </div>
+      <style jsx global>{`
+        @keyframes scanline {
+          0% {
+            background-position: 0 0;
+          }
+          100% {
+            background-position: 0 100%;
+          }
+        }
+      `}</style>
+    </main>
   );
 }
